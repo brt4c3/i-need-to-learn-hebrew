@@ -1,0 +1,129 @@
+---
+- name: Setup Audio Processing Environment in Docker
+  hosts: trainhebrew_container
+  become: true
+  become_method: sudo
+  vars:
+    train_dir: "/data/train"
+    test_dir: "/data/test"
+    lang_dir: "/data/lang"
+    model_dir: "/opt/kaldi/exp/tri2"
+    praat_script: "/opt/praat/voice_isolation.praat"
+    mongo_uri: "mongodb://localhost:27017"
+    db_name: "HebrewSpeechRecognition"
+    collection_name: "Transcriptions"
+
+  tasks:
+    # UPGRADE to Python3
+    - name: Upgrade pip
+      pip:
+        name: pip
+        extra_args: --upgrade
+        executable: pip3
+
+    # Install required packages
+    - name: Install dependencies
+      apt:
+        name:
+          - pulseaudio
+          - pavucontrol
+          - ffmpeg
+          - python3-pip
+          - iptables
+          - git 
+          - build-essential 
+          - cmake 
+          - libatlas-base-dev 
+          - libboost-all-dev 
+          - sox 
+          - praat 
+        update_cache: yes
+
+    # Install pip packages
+    - name: Install pip packages
+      pip:
+        name:
+          - pymongo
+          - vosk
+          - torch
+        executable: pip3
+
+    # Clone Kaldi repository and build
+    - name: Create Kaldi working directory
+      file:
+        path: "/opt/kaldi"
+        state: directory
+        owner: "root"
+        mode: '0755'
+
+    - name: Clone Kaldi repository
+      git:
+        repo: "https://github.com/kaldi-asr/kaldi.git"
+        dest: "/opt/kaldi"
+        version: "master"
+
+    - name: Build and Install Kaldi
+      shell: |
+        cd /opt/kaldi/tools
+        make
+        cd ../src
+        ./configure
+        make -j4
+      args:
+        chdir: /opt/kaldi
+        creates: "/opt/kaldi/src/online2bin/online2-wav-nnet3-latgen-faster"
+    
+    # Copy WAR file to Tomcat
+    - name: Deploy train-hebrew WAR file to Tomcat
+      copy:
+        src: "../train-hebrew/target/train-hebrew-1.0-SNAPSHOT.war"
+        dest: "/usr/local/tomcat/webapps/train-hebrew.war"
+        
+    # Preprocess audio files
+#    - name: Preprocess audio files (convert to 16kHz WAV, normalize)
+#      shell: |
+#        for file in {{ train_dir }}/*.wav; do
+#          output="${file%.wav}.wav"
+#         ffmpeg -i "$file" -ar 16000 "$output"
+#          sox "$output" "$output" norm
+#        done
+#      args:
+#        executable: /bin/bash
+#
+#    # Extract MFCC features
+#    - name: Extract MFCC features
+#      shell: |
+#        steps/make_mfcc.sh --nj 4 --mfcc-config conf/mfcc.conf {{ train_dir }} exp/make_mfcc/train mfcc
+#        steps/compute_cmvn_stats.sh {{ train_dir }} exp/make_mfcc/train mfcc
+#      args:
+#        chdir: /opt/kaldi
+#        executable: /bin/bash
+#
+    # Train Kaldi models
+#    - name: Train Kaldi models
+#      shell: |
+#        steps/train_mono.sh --nj 4 --cmd utils/run.pl {{ train_dir }} {{ lang_dir }} exp/mono
+#        steps/train_deltas.sh 2000 10000 {{ train_dir }} {{ lang_dir }} exp/mono_ali exp/tri1
+#        steps/train_lda_mllt.sh --cmd utils/run.pl 2500 15000 {{ train_dir }} {{ lang_dir }} exp/tri1_ali {{ model_dir }}
+#      args:
+#        chdir: /opt/kaldi
+#        executable: /bin/bash
+
+    # Process WAV files with Kaldi and Praat
+#    - name: Process WAV files with Kaldi and Praat
+#      shell: |
+#        for wav_file in {{ train_dir }}/*.wav; do
+#          file_name=$(basename "$wav_file" .wav)
+#          praat --run {{ praat_script }} "$wav_file"
+#          steps/decode.sh --nj 4 --cmd utils/run.pl {{ model_dir }}/graph "$wav_file" {{ model_dir }}/decode_test
+#          transcription=$(cat {{ model_dir }}/decode_test/transcripts)
+#          python3 -c "
+#import pymongo
+#client = pymongo.MongoClient('{{ mongo_uri }}')
+#db = client['{{ db_name }}']
+#collection = db['{{ collection_name }}']
+#record = {'file_name': '$file_name', 'transcription': '$transcription'}
+#collection.insert_one(record)"
+#        done
+#      args:
+#        executable: /bin/bash
