@@ -39,4 +39,6 @@ ffmpeg -i 'LilTexas.mp3' -vn -acodec pcm_s16le -ar 44100 -ac 2 output.wav
     - Groovy
     // Having problems running groovy pipeline loaclly
 
-
+# Zabbix
+docker pull zabbix/zabbix-server-pgsql
+docker run --name mon_app_home -e DB_SERVER_HOST="mon_app_pgsql" -e POSTGRES_USER="zabbix" -e POSTGRES_PASSWORD="Password1" --init -d zabbix/zabbix-server-pgsql

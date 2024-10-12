@@ -4,7 +4,13 @@ FROM ubuntu:20.04
 # Set environment variables to minimize user interaction
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PROMETHEUS_VERSION=2.46.0
-ENV TOMCAT_VERSION=9.0
+ENV TOMCAT_VERSION=9.0.96
+
+# Set JAVA_HOME environment variable
+ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+
+# Add JAVA_HOME to PATH
+ENV PATH=$JAVA_HOME/bin:$PATH
 
 # Update and install required packages
 RUN apt-get update && apt-get install -y \
@@ -26,8 +32,8 @@ RUN apt-get update && apt-get install -y \
     binfmt-support \
     libxml2 \
     zabbix-agent \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    openjdk-11-jdk \
+    && apt-get clean  
 
 # Download and install Prometheus
 RUN wget https://github.com/prometheus/prometheus/releases/download/v${PROMETHEUS_VERSION}/prometheus-${PROMETHEUS_VERSION}.linux-amd64.tar.gz && \
@@ -52,7 +58,7 @@ RUN useradd -m -s /bin/bash ansible_user && \
 RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
 
 # Configure Zabbix Agent (replace <ZABBIX_SERVER_IP> with your Zabbix server's IP address)
-RUN sed -i 's/Server=127.0.0.1/Server=<ZABBIX_SERVER_IP>/' /etc/zabbix/zabbix_agentd.conf && \
+RUN sed -i 's/Server=127.0.0.1/Server=mon_app_home/' /etc/zabbix/zabbix_agentd.conf && \
     sed -i 's/Hostname=Zabbix server/Hostname=docker-agent/' /etc/zabbix/zabbix_agentd.conf
 
 # Enable Zabbix agent service
@@ -65,7 +71,7 @@ EXPOSE 22 10050 9090 8080
 COPY prometheus.yml /opt/prometheus/prometheus.yml
 
 # Copy entrypoint script for container startup
-COPY entrypoint.sh /usr/local/bin/
+COPY entrypoint.sh /usr/local/bin/ 
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Start SSH, Zabbix agent, Prometheus, Tomcat, and keep the container running

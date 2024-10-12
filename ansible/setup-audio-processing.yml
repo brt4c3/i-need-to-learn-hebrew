@@ -1,6 +1,6 @@
 ---
 - name: Setup Audio Processing Environment in Docker
-  hosts: trainhebrew_container
+  hosts: trainhebrew_container_env
   become: true
   become_method: sudo
   vars:
@@ -39,29 +39,71 @@
           - praat 
         update_cache: yes
 
+
+# ENABLE UDP NETWORK ON
     # Install pip packages
-    - name: Install pip packages
+    - name: Install pip packages torch
+      pip:
+        name:
+          - torch
+        executable: pip3
+    - name: Install pip packages vosk
+      pip:
+        name:
+          - vosk
+        executable: pip3
+    - name: Install pip packages pymongo
       pip:
         name:
           - pymongo
-          - vosk
-          - torch
         executable: pip3
+
+    - name: Ensure the user kaldi exists
+      user:
+        name: kaldi
+        state: present
+        shell: /bin/bash  
+        home: /home/kaldi  
+        create_home: yes 
 
     # Clone Kaldi repository and build
     - name: Create Kaldi working directory
       file:
         path: "/opt/kaldi"
         state: directory
-        owner: "root"
+        owner: "kaldi"
         mode: '0755'
+# https://github.com/kaldi-asr/kaldi/archive/refs/heads/master.zip
+# https://github.com/kaldi-asr/kaldi.git
+#    - name: Clone Kaldi repository
+#      git:
+#        repo: "https://github.com/kaldi-asr/kaldi.git"
+#        dest: "/opt/kaldi"
+#        version: "master"
+    - name: Download repository zip file
+      get_url:
+        url: https://github.com/kaldi-asr/kaldi/archive/refs/heads/master.zip
+        dest: /opt/kaldi/master.zip  # Change to your desired destination
+        mode: '0644'
 
-    - name: Clone Kaldi repository
-      git:
-        repo: "https://github.com/kaldi-asr/kaldi.git"
-        dest: "/opt/kaldi"
-        version: "master"
+    - name: Install unzip utility
+      apt:
+        name: unzip
+        state: present
+      become: yes 
 
+    - name: Unzip the downloaded file
+      unarchive:
+        src: /opt/kaldi/master.zip
+        dest: /opt/kaldi  
+        remote_src: yes 
+
+#    - name: Fetch from Git
+#      command: git ls-remote origin -h refs/heads/master
+#      args:
+#        chdir: /opt/kaldi
+
+# this part takes forever
     - name: Build and Install Kaldi
       shell: |
         cd /opt/kaldi/tools
@@ -78,52 +120,3 @@
       copy:
         src: "../train-hebrew/target/train-hebrew-1.0-SNAPSHOT.war"
         dest: "/usr/local/tomcat/webapps/train-hebrew.war"
-        
-    # Preprocess audio files
-#    - name: Preprocess audio files (convert to 16kHz WAV, normalize)
-#      shell: |
-#        for file in {{ train_dir }}/*.wav; do
-#          output="${file%.wav}.wav"
-#         ffmpeg -i "$file" -ar 16000 "$output"
-#          sox "$output" "$output" norm
-#        done
-#      args:
-#        executable: /bin/bash
-#
-#    # Extract MFCC features
-#    - name: Extract MFCC features
-#      shell: |
-#        steps/make_mfcc.sh --nj 4 --mfcc-config conf/mfcc.conf {{ train_dir }} exp/make_mfcc/train mfcc
-#        steps/compute_cmvn_stats.sh {{ train_dir }} exp/make_mfcc/train mfcc
-#      args:
-#        chdir: /opt/kaldi
-#        executable: /bin/bash
-#
-    # Train Kaldi models
-#    - name: Train Kaldi models
-#      shell: |
-#        steps/train_mono.sh --nj 4 --cmd utils/run.pl {{ train_dir }} {{ lang_dir }} exp/mono
-#        steps/train_deltas.sh 2000 10000 {{ train_dir }} {{ lang_dir }} exp/mono_ali exp/tri1
-#        steps/train_lda_mllt.sh --cmd utils/run.pl 2500 15000 {{ train_dir }} {{ lang_dir }} exp/tri1_ali {{ model_dir }}
-#      args:
-#        chdir: /opt/kaldi
-#        executable: /bin/bash
-
-    # Process WAV files with Kaldi and Praat
-#    - name: Process WAV files with Kaldi and Praat
-#      shell: |
-#        for wav_file in {{ train_dir }}/*.wav; do
-#          file_name=$(basename "$wav_file" .wav)
-#          praat --run {{ praat_script }} "$wav_file"
-#          steps/decode.sh --nj 4 --cmd utils/run.pl {{ model_dir }}/graph "$wav_file" {{ model_dir }}/decode_test
-#          transcription=$(cat {{ model_dir }}/decode_test/transcripts)
-#          python3 -c "
-#import pymongo
-#client = pymongo.MongoClient('{{ mongo_uri }}')
-#db = client['{{ db_name }}']
-#collection = db['{{ collection_name }}']
-#record = {'file_name': '$file_name', 'transcription': '$transcription'}
-#collection.insert_one(record)"
-#        done
-#      args:
-#        executable: /bin/bash

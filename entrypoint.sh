@@ -1,14 +1,14 @@
 #!/bin/bash
-# Start the SSH service
+
+# Start SSH service
 service ssh start
 
-# Start the Zabbix agent service
+# Start Zabbix agent service
 service zabbix-agent start
 
-# Start Prometheus
-prometheus --config.file=/opt/prometheus/prometheus.yml &
+# Start Prometheus in the background
+/opt/prometheus/prometheus --config.file=/opt/prometheus/prometheus.yml &
 
-/opt/tomcat/bin/catalina.sh run &
-
-# Keep the container running by tailing syslog or another log
-tail -f /var/log/syslog
+# Start Tomcat in the foreground
+/opt/tomcat/bin/startup.sh
+/opt/tomcat/bin/catalina.sh run
