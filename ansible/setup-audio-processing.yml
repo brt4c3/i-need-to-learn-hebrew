@@ -102,19 +102,41 @@
 #      command: git ls-remote origin -h refs/heads/master
 #      args:
 #        chdir: /opt/kaldi
+    - name: Run Kaldi check_dependencies.sh
+      shell: |
+        cd /opt/kaldi/tools/extras
+        ./check_dependencies.sh
+      register: check_dependencies_result
+      ignore_errors: yes
 
-# this part takes forever
-    - name: Build and Install Kaldi
+    - name: Debug output of check_dependencies.sh
+      debug:
+        var: check_dependencies_result.stdout_lines
+
+    - name: Build Kaldi using g++-4.8 or system default compiler
       shell: |
         cd /opt/kaldi/tools
-        make
-        cd ../src
-        ./configure
-        make -j4
+        make CXX=g++-4.8 -j 4
       args:
-        chdir: /opt/kaldi
-        creates: "/opt/kaldi/src/online2bin/online2-wav-nnet3-latgen-faster"
-    
+        chdir: /opt/kaldi/tools
+
+    - name: Build Kaldi src
+      shell: |
+        cd /opt/kaldi/src
+        make -j 4
+      args:
+        chdir: /opt/kaldi/src
+        
+    - name: Check if Kaldi make mfcc script exists
+      stat:
+        path: /opt/kaldi/steps/make_mfcc.sh
+      register: kaldi_make
+
+    - name: Fail if configure script is missing
+      fail:
+        msg: "Kaldi make mfcc script is missing. Please ensure Kaldi is properly cloned."
+      when: not kaldi_make.stat.exists
+
     # Copy WAR file to Tomcat
     - name: Deploy train-hebrew WAR file to Tomcat
       copy:

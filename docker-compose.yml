@@ -1,0 +1,36 @@
+version: '3'
+services:
+  zabbix_web:
+    image: zabbix/zabbix-web-apache-pgsql:latest
+    container_name: monitor_zabbix_server
+    environment:
+      DB_SERVER_HOST: monitor_zabbix_server
+      POSTGRES_USER: zabbix
+      POSTGRES_PASSWORD: Password1
+      ZBX_SERVER_HOST: monitor-zabbix-server
+      PHP_TZ: "Europe/London" #probably close to grinidge 
+    ports:
+      - "1080:1080"  # Web UI port
+      - "5432:5432" #PostgreSQL
+    networks:
+      - zabbix_network
+    restart: always
+
+  custom_service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: train-hebrew-app
+    networks:
+      - zabbix_network
+    ports:
+      - "5000:5000"  # mogoDB
+      - "22:22"      # SSH service for Ansible
+      - "10050:10050" # Zabbix agent port
+      - "9090:9090"  # Prometheus
+      - "8080:8080"  # Tomcat
+    restart: always
+
+networks:
+  zabbix_network:
+    driver: bridge
